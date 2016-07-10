@@ -24,51 +24,64 @@ from . import rfc3156
 
 
 class GPGEmailMessage(EmailMultiAlternatives):
+    @property
+    def signed(self):
+        return bool(self.gpg_signers or (self.gpg_context and self.gpg_context.signers))
+
+    @property
+    def encrypted(self):
+        return bool(self.gpg_recipients)
+
     def message(self):
+        # If neither encryption nor signing was request, we just return the normal message
+        orig_msg = super(GPGEmailMessage, self).message()
+        if not self.encrypted and not self.signed:
+            return orig_msg
+
         encoding = self.encoding or settings.DEFAULT_CHARSET
         signers = self.gpg_signers
         recipients = self.gpg_recipients
         context = self.gpg_context
 
-        if recipients or signers or (context and context.signers):
-            orig_msg = super(GPGEmailMessage, self).message()
+        if isinstance(orig_msg, MIMEMultipart):
+            to_encrypt = MIMEMultipart(_subtype='alternative', _subparts=orig_msg.get_payload())
+        else:  # No attachments were added
+            to_encrypt = orig_msg.get_payload()
 
-            if isinstance(orig_msg, MIMEMultipart):
-                to_encrypt = MIMEMultipart(_subtype='alternative', _subparts=orig_msg.get_payload())
-            else:  # No attachments were added
-                to_encrypt = orig_msg.get_payload()
+        msg = rfc3156(to_encrypt, recipients=recipients, signers=signers, context=context,
+                      always_trust=self.gpg_always_trust)
 
-            msg = rfc3156(to_encrypt, recipients=recipients, signers=signers, context=context,
-                          always_trust=self.gpg_always_trust)
+        # if this is already a Multipart message, we can just set the payload and return it
+        if isinstance(orig_msg, MIMEMultipart):
+            orig_msg.set_payload(msg.get_payload())
+            orig_msg.set_param('protocol', self.protocol)
 
-            # if this is already a Multipart message, we can just set the payload and return it
-            if isinstance(orig_msg, MIMEMultipart):
-                orig_msg.set_payload(msg.get_payload())
-                orig_msg.set_param('protocol', self.protocol)
+            # Set the micalg Content-Type parameter. Only present in messages that are only signed
+            # TODO:We don't yet know how to get the correct value, we just return GPGs default
+            if self.encrypted is False:
+                orig_msg.set_param('micalg', 'pgp-sha256')
 
-                with open('/home/mati/git/mati/pygpgme-mime/test/final-multipart.eml', 'wb') as fp:
-                    fp.write(orig_msg.as_bytes())
+            return orig_msg
 
-                return orig_msg
+        # This message was not a multipart message, so we create a new multipart message and attach
+        # the payload of the signed and/or encrypted payload.
+        body, sig = msg.get_payload()
 
-            body, sig = msg.get_payload()
+        gpg_msg = SafeMIMEMultipart(_subtype=self.alternative_subtype, encoding=encoding)
+        gpg_msg.attach(body)
+        gpg_msg.attach(sig)
 
-            gpg_msg = SafeMIMEMultipart(_subtype=self.alternative_subtype, encoding=encoding)
-            gpg_msg.attach(body)
-            gpg_msg.attach(sig)
+        for key, value in orig_msg.items():
+            if key.lower() in ['Content-Type', 'Content-Transfer-Encoding']:
+                continue
+            gpg_msg[key] = value
 
-            for key, value in orig_msg.items():
-                if key.lower() in ['Content-Type', 'Content-Transfer-Encoding']:
-                    continue
-                gpg_msg[key] = value
-
-            # TODO: We don't yet know how to get the correct value
+        # TODO: We don't yet know how to get the correct value
+        if self.encrypted is False:
             gpg_msg.set_param('micalg', 'pgp-sha256')
-            gpg_msg.set_param('protocol', self.protocol)
+        gpg_msg.set_param('protocol', self.protocol)
 
-            return gpg_msg
-        else:
-            return super(GPGEmailMessage, self).message()
+        return gpg_msg
 
     def __init__(self, *args, **kwargs):
         self.gpg_signers = kwargs.pop('gpg_signers', None)
