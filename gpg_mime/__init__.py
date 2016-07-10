@@ -102,7 +102,8 @@ def rfc3156(message, recipients=None, signers=None, context=None, always_trust=F
     else:  # just signing
         del message['MIME-Version']
         for payload in message.get_payload():
-            del payload['MIME-Version']
+            if isinstance(payload, MIMEBase):
+                del payload['MIME-Version']
         message.policy = message.policy.clone(max_line_length=0)
 
         to_sign = message.as_bytes().replace(b'\n', b'\r\n')
