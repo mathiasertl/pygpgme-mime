@@ -15,9 +15,6 @@
 
 from __future__ import unicode_literals, absolute_import
 
-import email
-import io
-
 from email.encoders import encode_noop
 from email.mime.application import MIMEApplication
 
@@ -27,19 +24,6 @@ import six
 from six.moves.email_mime_multipart import MIMEMultipart
 from six.moves.email_mime_text import MIMEText
 from six.moves.email_mime_base import MIMEBase
-
-
-def verify_sig(message, context=None):
-    if context is None:
-        context = gpgme.Context()
-    if isinstance(message, six.string_types):
-        with open(message) as fp:
-            message = email.message_from_file(fp)
-
-    body, sig = message.get_payload()
-    status = context.verify(io.BytesIO(sig.as_bytes()),
-                            io.BytesIO(body.as_bytes()), None)[0].status
-    return status
 
 
 def rfc3156(message, recipients=None, signers=None, context=None, always_trust=False):
@@ -121,11 +105,6 @@ def rfc3156(message, recipients=None, signers=None, context=None, always_trust=F
         output_bytes.seek(0)
         signature = output_bytes.getvalue()
 
-        with open('/home/mati/git/mati/pygpgme-mime/test/message', 'wb') as fp:
-            fp.write(message.as_bytes())
-        with open('/home/mati/git/mati/pygpgme-mime/test/message.sig', 'wb') as fp:
-            fp.write(signature)
-
         sig = MIMEBase(_maintype='application', _subtype='pgp-signature', name='signature.asc')
         sig.set_payload(signature.decode('utf-8'))
         sig.add_header('Content-Description', 'OpenPGP digital signature')
@@ -136,9 +115,6 @@ def rfc3156(message, recipients=None, signers=None, context=None, always_trust=F
         msg = MIMEMultipart(_subtype='signed', _subparts=[message, sig])
         msg.set_param('protocol', 'application/pgp-signature')
 
-        with open('/home/mati/git/mati/pygpgme-mime/test/multipart.eml', 'wb') as fp:
-            fp.write(msg.as_bytes())
-
         from django.core.mail import EmailMultiAlternatives
         msg_test = EmailMultiAlternatives()
         msg_test.mixed_subtype = 'signed'
@@ -146,10 +122,5 @@ def rfc3156(message, recipients=None, signers=None, context=None, always_trust=F
         msg_test.attach(sig)
         msg_test = msg_test.message()
         msg_test.set_param('protocol', 'application/pgp-signature')
-        with open('/home/mati/git/mati/pygpgme-mime/test/multipart_test.eml', 'wb') as fp:
-            fp.write(msg_test.as_bytes())
-        with open('/home/mati/git/mati/pygpgme-mime/test/multipart_test2.eml', 'wb') as fp:
-            fp.write(msg_test.as_bytes(linesep='\r\n'))
-
 
         return msg
