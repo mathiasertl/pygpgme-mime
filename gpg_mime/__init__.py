@@ -115,12 +115,4 @@ def rfc3156(message, recipients=None, signers=None, context=None, always_trust=F
         msg = MIMEMultipart(_subtype='signed', _subparts=[message, sig])
         msg.set_param('protocol', 'application/pgp-signature')
 
-        from django.core.mail import EmailMultiAlternatives
-        msg_test = EmailMultiAlternatives()
-        msg_test.mixed_subtype = 'signed'
-        msg_test.attach(message)
-        msg_test.attach(sig)
-        msg_test = msg_test.message()
-        msg_test.set_param('protocol', 'application/pgp-signature')
-
         return msg
