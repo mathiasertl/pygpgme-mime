@@ -18,10 +18,10 @@ from __future__ import unicode_literals, absolute_import
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.core.mail import SafeMIMEMultipart
-from django.utils.encoding import force_text
 from six.moves.email_mime_multipart import MIMEMultipart
 
 from . import rfc3156
+
 
 class GPGEmailMessage(EmailMultiAlternatives):
     def message(self):
@@ -56,20 +56,15 @@ class GPGEmailMessage(EmailMultiAlternatives):
             gpg_msg = SafeMIMEMultipart(_subtype=self.alternative_subtype, encoding=encoding)
             gpg_msg.attach(body)
             gpg_msg.attach(sig)
-            gpg_msg.set_param('protocol', self.protocol)
-            gpg_msg['Subject'] = self.subject
-            gpg_msg['From'] = self.extra_headers.get('From', self.from_email)
-            gpg_msg['To'] = self.extra_headers.get('To', ', '.join(map(force_text, self.to)))
-            if self.cc:
-                gpg_msg['Cc'] = ', '.join(map(force_text, self.cc))
-            if self.reply_to:
-                gpg_msg['Reply-To'] = self.extra_headers.get('Reply-To', ', '.join(map(force_text, self.reply_to)))
 
-            with open('/home/mati/git/mati/pygpgme-mime/test/final-normal.eml', 'wb') as fp:
-                fp.write(gpg_msg.as_bytes())
+            for key, value in orig_msg.items():
+                if key.lower() in ['Content-Type', 'Content-Transfer-Encoding']:
+                    continue
+                gpg_msg[key] = value
 
             # TODO: We don't yet know how to get the correct value
             gpg_msg.set_param('micalg', 'pgp-sha256')
+            gpg_msg.set_param('protocol', self.protocol)
 
             return gpg_msg
         else:
