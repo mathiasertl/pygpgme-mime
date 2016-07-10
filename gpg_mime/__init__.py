@@ -100,6 +100,11 @@ def rfc3156(message, recipients=None, signers=None, context=None, always_trust=F
         msg.set_param('protocol', 'application/pgp-encrypted')
         return msg
     else:  # just signing
+        del message['MIME-Version']
+        for payload in message.get_payload():
+            del payload['MIME-Version']
+        message.policy = message.policy.clone(max_line_length=0)
+
         to_sign = message.as_bytes().replace(b'\n', b'\r\n')
         context.sign(six.BytesIO(to_sign), output_bytes, gpgme.SIG_MODE_DETACH)
         output_bytes.seek(0)
@@ -114,5 +119,6 @@ def rfc3156(message, recipients=None, signers=None, context=None, always_trust=F
 
         msg = MIMEMultipart(_subtype='signed', _subparts=[message, sig])
         msg.set_param('protocol', 'application/pgp-signature')
+        del msg['MIME-Version']
 
         return msg

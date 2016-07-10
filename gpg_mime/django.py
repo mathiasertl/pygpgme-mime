@@ -53,6 +53,7 @@ class GPGEmailMessage(EmailMultiAlternatives):
 
         # if this is already a Multipart message, we can just set the payload and return it
         if isinstance(orig_msg, MIMEMultipart):
+            orig_msg.policy = orig_msg.policy.clone(max_line_length=0)
             orig_msg.set_payload(msg.get_payload())
             orig_msg.set_param('protocol', self.protocol)
 
